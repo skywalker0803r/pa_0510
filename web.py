@@ -5,33 +5,23 @@ import joblib
 import warnings;warnings.simplefilter('ignore')
 from utils import *
 
-# load model object 
-api = joblib.load('./model/PAagent.pkl')
-
-# build model_dict
 model_dict = {}
-model_dict['V1'] = api
+model_dict['V1'] = joblib.load('./model/PAagent.pkl')
 
-#title
 st.title('PA control advice model')
 
-# user select model
-model_name = st.selectbox(
-	'what model you want to use?',
-	('V1',))
+model_name = st.selectbox('what model you want to use?',('V1',))
 st.write('You selected',model_name)
 
-# user input
-s = st.number_input('input set point(0997)')
-d = st.number_input('input DATA OF USE')
-st.write('The user input is ',s,d)
+request = st.number_input('input set point(0997)')
+state = st.number_input('input DATA OF USE')
+st.write('The user request {} state {}'.format(request,state))
 
-# user press predict button
 if st.button('predict'):
-	model = model_dict[model_name]
-	advice,value = model.get_advice(s,d)
-	print(value)
+	advice,output,stream = model_dict[model_name].get_advice(state,request)
 	st.subheader('control advice')
 	st.write(advice)
 	st.subheader('predict output')
-	st.write(pd.DataFrame([value]))
+	st.write(pd.DataFrame(output))
+	st.subheader('predict stream')
+	st.write(pd.DataFrame(stream))

@@ -16,79 +16,89 @@ import torchvision
 import joblib
 import os
 
+class Critic(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.time_step = time_step
+        self.num_sensor = num_sensor
+        self.h_size = 64
+        
+        self.output_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
+                                          nn.ReLU(),
+                                          nn.Linear(self.h_size,1),
+                                         )
+        
+        self.stream_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
+                                          nn.ReLU(),
+                                          nn.Linear(self.h_size,1),
+                                         )
+        
+        self.conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,self.h_size-1,kernel_size = 36),
+                                        nn.ReLU(),
+                                       )
+        
+    def forward(self,state,action):
+        batch_size = state.shape[0]
+        
+        action = self.conv_layer(action.permute(0,2,1))
+        action = action.reshape(batch_size,-1)
+        
+        combine = torch.cat((state,action),dim=-1)
+        
+        output = self.output_layer(combine)
+        stream = self.stream_layer(combine)
+        
+        return F.sigmoid(output),F.sigmoid(stream)
+
 class Actor(nn.Module):
     def __init__(self):
         super().__init__()
         self.time_step = 36
         self.num_sensor = 13
         self.flat_size = self.time_step*self.num_sensor
-        
-        # 觸媒使用時間和設定值 -> 操作條件
         self.fc = nn.Sequential(nn.Linear(2,128),nn.ReLU(),nn.Linear(128,self.flat_size))
         
-    def forward(self,d,s):
-        action = self.fc(torch.cat((d,s),dim=1))
+    def forward(self,state,request):
+        action = self.fc(torch.cat((state,request),dim=1))
         action = action.view(-1,self.time_step,self.num_sensor)
         return F.sigmoid(action)
 
-class PA_ROBOT(object):
+class PA_ROBOT:
     def __init__(self):
-        self.mm_v = data['mm_v']
-        self.mm_d = data['mm_d']
-        self.mm_a = data['mm_a']
-        self.a_col = data['a_col']
+        self.mm_output = data['mm_output']
+        self.mm_stream = data['mm_stream']
+        self.mm_state = data['mm_state']
+        self.mm_action = data['mm_action']
+        self.action_col = data['action_col']
         self.tag_map = tag_map
         self.actor = actor
         self.critic = critic
     
-    def get_advice(self,s,d):
-        s = self.mm_v.transform([[s]])
-        d = self.mm_d.transform([[d]])
-        d = torch.FloatTensor([d]).cuda().reshape(-1,1)
-        s = torch.FloatTensor([s]).cuda().reshape(-1,1)
+    def get_advice(self,state,request):
+        # sacle inpus
+        request = self.mm_output.transform([[request]])
+        state = self.mm_state.transform([[state]])
         
-        a = self.actor(d,s)
+        # tensor input
+        request = torch.FloatTensor([request]).cuda().reshape(-1,1)
+        state = torch.FloatTensor([state]).cuda().reshape(-1,1)
         
-        v = self.critic(d,a).detach().cpu().numpy()
-        v = self.mm_v.inverse_transform(v).squeeze()
+        # actor forward
+        action = self.actor(state,request)
         
-        a = a.detach().cpu().numpy()
-        a = np.array([self.mm_a.inverse_transform(i) for i in a]).squeeze(0)
-        advice = pd.DataFrame(index = self.a_col)
+        # critic forward
+        output,stream = self.critic(state,action)
+        output = output.detach().cpu().numpy()
+        stream = stream.detach().cpu().numpy()
+        output = self.mm_output.inverse_transform(output)
+        stream = self.mm_stream.inverse_transform(stream)
+        
+        action = action.detach().cpu().numpy()
+        action = np.array([self.mm_action.inverse_transform(i) for i in action]).squeeze(0)
+        advice = pd.DataFrame(index = self.action_col)
         advice['chinese'] = advice.index.map(self.tag_map) 
-        advice['mean'] = a.mean(axis=0)
-        advice['max'] = a.max(axis=0)
-        advice['min'] = a.min(axis=0)
+        advice['mean'] = action.mean(axis=0)
+        advice['max'] = action.max(axis=0)
+        advice['min'] = action.min(axis=0)
         
-        return advice,v
-
-class panet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.time_step = time_step
-        self.num_sensor = num_sensor
-        self.flat_size = time_step*num_sensor
-        
-        self.w = nn.Sequential(nn.Linear(self.flat_size,128),# 操作條件 -> 權重
-                               nn.ReLU(),
-                               nn.Linear(128,time_step))
-        
-        self.b = nn.Sequential(nn.Linear(self.flat_size,128),# 操作條件 -> 偏移
-                               nn.ReLU(),
-                               nn.Linear(128,1))
-        
-        self.p = nn.Linear(1,1,bias=False) # 入料/出料 比例
-        
-    def forward(self,d,a):
-        feed,factor = self.fetch(a) #把入料和其他因子分開
-        W = F.softmax(self.w(a.view(-1,self.flat_size))**2,dim=1) #全部因子丟進去算權重
-        b = self.b(a.view(-1,self.flat_size)) #全部因子丟進去算偏移
-        WX = torch.sum(feed*W,dim=1).view(-1,1) #入料跟權重做內積
-        output = self.p(WX) + b #類似線性回歸
-        return F.sigmoid(output) #限縮到正常範圍內
-        
-    def fetch(self,a):
-        batch_size = a.shape[0]
-        feed = a[:,:,0]
-        factor = a[:,:,1:].reshape(batch_size,-1)
-        return feed,factor
+        return advice,output,stream
