@@ -19,6 +19,7 @@ import os
 class Critic(nn.Module):
     def __init__(self):
         super().__init__()
+        
         self.time_step = time_step
         self.num_sensor = num_sensor
         self.h_size = 64
@@ -37,14 +38,28 @@ class Critic(nn.Module):
                                         nn.ReLU(),
                                        )
         
+        self.fc_layer = nn.Sequential(nn.Linear(532,self.h_size),
+                                          nn.ReLU(),
+                                          nn.Linear(self.h_size,self.h_size),
+                                         )
+        
     def forward(self,state,action):
         batch_size = state.shape[0]
         
-        action = self.conv_layer(action.permute(0,2,1))
-        action = action.reshape(batch_size,-1)
+        # action have two path,path_1 and path_2
+        action_1 = self.conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
+        action_2 = action.reshape(batch_size,-1)
         
+        # combine two path action_1,action_2
+        action = torch.cat((action_1,action_2),dim=-1)
+        
+        # combine state action
         combine = torch.cat((state,action),dim=-1)
         
+        # fc forward
+        combine = self.fc_layer(combine)
+        
+        # get output and stream
         output = self.output_layer(combine)
         stream = self.stream_layer(combine)
         
