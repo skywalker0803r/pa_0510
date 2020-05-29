@@ -21,7 +21,17 @@ if st.button('predict'):
 	advice,output,stream = model_dict[model_name].get_advice(state,request)
 	st.subheader('control advice')
 	st.write(advice)
+	
 	st.subheader('predict output')
 	st.write(pd.DataFrame(output))
+	
 	st.subheader('predict stream')
 	st.write(pd.DataFrame(stream))
+	
+	feed  = advice.iloc[0,1]
+	st.subheader('predict 單耗')
+	st.write(pd.DataFrame(feed/output))
+
+	st.subheader('predict 單耗(蒸氣)')
+	st.write(pd.DataFrame(feed/stream))
+

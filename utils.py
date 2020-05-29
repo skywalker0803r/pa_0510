@@ -19,34 +19,55 @@ import os
 class Critic(nn.Module):
     def __init__(self):
         super().__init__()
+        
         self.time_step = time_step
         self.num_sensor = num_sensor
         self.h_size = 64
+        self.kernel_size = 36
         
-        self.output_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
+        # output model
+        self.output_layer = nn.Sequential(nn.Linear(460,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,1),
                                          )
         
-        self.stream_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
+        self.output_conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,
+                                                         self.h_size-1,
+                                                         kernel_size=self.kernel_size),
+                                               nn.ReLU(),
+                                              )
+        
+        # stream model
+        self.stream_layer = nn.Sequential(nn.Linear(460,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,1),
                                          )
         
-        self.conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,self.h_size-1,kernel_size = 36),
-                                        nn.ReLU(),
-                                       )
+        self.stream_conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,
+                                                         self.h_size-1,
+                                                         kernel_size=self.kernel_size),
+                                               nn.ReLU(),
+                                              )
+        
         
     def forward(self,state,action):
+        
+        # get batch_size
         batch_size = state.shape[0]
         
-        action = self.conv_layer(action.permute(0,2,1))
-        action = action.reshape(batch_size,-1)
+        # make features
+        state = state.reshape(batch_size,-1)
+        action_reshape = action.reshape(batch_size,-1)
+        action_output = self.output_conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
+        action_stream = self.stream_conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
         
-        combine = torch.cat((state,action),dim=-1)
+        # combine features
+        combine_output = torch.cat((state,action_reshape,action_output),dim = -1)
+        combine_stream = torch.cat((state,action_reshape,action_stream),dim = -1)
         
-        output = self.output_layer(combine)
-        stream = self.stream_layer(combine)
+        # get output and stream
+        output = self.output_layer(combine_output)
+        stream = self.stream_layer(combine_stream)
         
         return F.sigmoid(output),F.sigmoid(stream)
 
@@ -54,7 +75,7 @@ class Actor(nn.Module):
     def __init__(self):
         super().__init__()
         self.time_step = 36
-        self.num_sensor = 13
+        self.num_sensor = 11
         self.flat_size = self.time_step*self.num_sensor
         self.fc = nn.Sequential(nn.Linear(2,128),nn.ReLU(),nn.Linear(128,self.flat_size))
         
@@ -75,7 +96,7 @@ class PA_ROBOT:
         self.critic = critic
     
     def get_advice(self,state,request):
-        # sacle inpus
+        # sacle inputs
         request = self.mm_output.transform([[request]])
         state = self.mm_state.transform([[state]])
         
