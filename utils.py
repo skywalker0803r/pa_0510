@@ -23,51 +23,45 @@ class Critic(nn.Module):
         self.time_step = time_step
         self.num_sensor = num_sensor
         self.h_size = 64
-        self.kernel_size = 36
         
-        # output model
-        self.output_layer = nn.Sequential(nn.Linear(460,self.h_size),
+        self.output_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,1),
                                          )
         
-        self.output_conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,
-                                                         self.h_size-1,
-                                                         kernel_size=self.kernel_size),
-                                               nn.ReLU(),
-                                              )
-        
-        # stream model
-        self.stream_layer = nn.Sequential(nn.Linear(460,self.h_size),
+        self.stream_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,1),
                                          )
         
-        self.stream_conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,
-                                                         self.h_size-1,
-                                                         kernel_size=self.kernel_size),
-                                               nn.ReLU(),
-                                              )
+        self.conv_layer = nn.Sequential(nn.Conv1d(self.num_sensor,self.h_size-1,kernel_size = 36),
+                                        nn.ReLU(),
+                                       )
         
+        self.fc_layer = nn.Sequential(nn.Linear(460,self.h_size),
+                                          nn.ReLU(),
+                                          nn.Linear(self.h_size,self.h_size),
+                                         )
         
     def forward(self,state,action):
-        
-        # get batch_size
         batch_size = state.shape[0]
         
-        # make features
-        state = state.reshape(batch_size,-1)
-        action_reshape = action.reshape(batch_size,-1)
-        action_output = self.output_conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
-        action_stream = self.stream_conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
+        # action have two path,path_1 and path_2
+        action_1 = self.conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
+        action_2 = action.reshape(batch_size,-1)
         
-        # combine features
-        combine_output = torch.cat((state,action_reshape,action_output),dim = -1)
-        combine_stream = torch.cat((state,action_reshape,action_stream),dim = -1)
+        # combine two path action_1,action_2
+        action = torch.cat((action_1,action_2),dim=-1)
+        
+        # combine state action
+        combine = torch.cat((state,action),dim=-1)
+        
+        # fc forward
+        combine = self.fc_layer(combine)
         
         # get output and stream
-        output = self.output_layer(combine_output)
-        stream = self.stream_layer(combine_stream)
+        output = self.output_layer(combine)
+        stream = self.stream_layer(combine)
         
         return F.sigmoid(output),F.sigmoid(stream)
 
@@ -94,28 +88,37 @@ class PA_ROBOT:
         self.tag_map = tag_map
         self.actor = actor
         self.critic = critic
+        self.lasso_w = lasso_w
     
     def get_advice(self,state,request):
-        # sacle inputs
+        
+        # sacle input
         request = self.mm_output.transform([[request]])
         state = self.mm_state.transform([[state]])
         
-        # tensor input
+        # tensor format input
         request = torch.FloatTensor([request]).cuda().reshape(-1,1)
         state = torch.FloatTensor([state]).cuda().reshape(-1,1)
         
         # actor forward
         action = self.actor(state,request)
         
-        # critic forward
-        output,stream = self.critic(state,action)
-        output = output.detach().cpu().numpy()
-        stream = stream.detach().cpu().numpy()
-        output = self.mm_output.inverse_transform(output)
-        stream = self.mm_stream.inverse_transform(stream)
+        # critic forward but not predict stream
+        output,_ = self.critic(state,action)
         
+        # lasso predict stream
+        batch_size = action.shape[0]
+        stream = (action.reshape(batch_size,-1)@self.lasso_w).reshape(-1,1)
+        
+        # inverse transform
+        output = output.detach().cpu().numpy()
+        output = self.mm_output.inverse_transform(output)
+        stream = stream.detach().cpu().numpy()
+        stream = self.mm_stream.inverse_transform(stream)
         action = action.detach().cpu().numpy()
         action = np.array([self.mm_action.inverse_transform(i) for i in action]).squeeze(0)
+        
+        # create advice DataFrame
         advice = pd.DataFrame(index = self.action_col)
         advice['chinese'] = advice.index.map(self.tag_map) 
         advice['mean'] = action.mean(axis=0)
