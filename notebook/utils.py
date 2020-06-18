@@ -39,7 +39,7 @@ class Critic(nn.Module):
                                         nn.ReLU(),
                                        )
         
-        self.fc_layer = nn.Sequential(nn.Linear(497,self.h_size),
+        self.fc_layer = nn.Sequential(nn.Linear(461,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,self.h_size),
                                          )
@@ -66,12 +66,11 @@ class Critic(nn.Module):
         
         return F.sigmoid(output),F.sigmoid(stream)
 
-
 class Actor(nn.Module):
     def __init__(self):
         super().__init__()
-        self.time_step = 36
-        self.num_sensor = 12
+        self.time_step = data['action'].shape[1]
+        self.num_sensor = data['action'].shape[2]
         self.flat_size = self.time_step*self.num_sensor
         self.fc = nn.Sequential(nn.Linear(3,128),nn.ReLU(),nn.Linear(128,self.flat_size))
         
@@ -100,14 +99,14 @@ class PA_ROBOT:
         state = self.mm_state.transform([state])
         
         # tensor format input
-        request = torch.FloatTensor([request]).cuda().reshape(-1,1)
-        state = torch.FloatTensor(state).cuda()
+        request = torch.FloatTensor([request]).reshape(-1,1)
+        state = torch.FloatTensor(state)
         
         # actor forward
         action = self.actor(state,request)
         
         # critic forward but not predict stream
-        output,_ = self.critic(state,action)
+        output,_ = self.critic(state.cuda(),action.cuda())
         
         # lasso predict stream
         batch_size = action.shape[0]
@@ -128,4 +127,5 @@ class PA_ROBOT:
         advice['max'] = action.max(axis=0)
         advice['min'] = action.min(axis=0)
         
-        return advice,output,stream
+        # feed/stream
+        return advice,output,stream,advice.loc['MLPAP_FQ-0619.PV','mean']/stream[0][0]

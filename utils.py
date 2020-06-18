@@ -16,6 +16,7 @@ import torchvision
 import joblib
 import os
 
+
 class Critic(nn.Module):
     def __init__(self):
         super().__init__()
@@ -38,7 +39,7 @@ class Critic(nn.Module):
                                         nn.ReLU(),
                                        )
         
-        self.fc_layer = nn.Sequential(nn.Linear(460,self.h_size),
+        self.fc_layer = nn.Sequential(nn.Linear(461,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,self.h_size),
                                          )
@@ -68,16 +69,17 @@ class Critic(nn.Module):
 class Actor(nn.Module):
     def __init__(self):
         super().__init__()
-        self.time_step = 36
-        self.num_sensor = 11
+        self.time_step = data['action'].shape[1]
+        self.num_sensor = data['action'].shape[2]
         self.flat_size = self.time_step*self.num_sensor
-        self.fc = nn.Sequential(nn.Linear(2,128),nn.ReLU(),nn.Linear(128,self.flat_size))
+        self.fc = nn.Sequential(nn.Linear(3,128),nn.ReLU(),nn.Linear(128,self.flat_size))
         
     def forward(self,state,request):
         action = self.fc(torch.cat((state,request),dim=1))
         action = action.view(-1,self.time_step,self.num_sensor)
         return F.sigmoid(action)
 
+    
 class PA_ROBOT:
     def __init__(self):
         self.mm_output = data['mm_output']
@@ -94,17 +96,17 @@ class PA_ROBOT:
         
         # sacle input
         request = self.mm_output.transform([[request]])
-        state = self.mm_state.transform([[state]])
+        state = self.mm_state.transform([state])
         
         # tensor format input
-        request = torch.FloatTensor([request]).cuda().reshape(-1,1)
-        state = torch.FloatTensor([state]).cuda().reshape(-1,1)
+        request = torch.FloatTensor([request]).reshape(-1,1)
+        state = torch.FloatTensor(state)
         
         # actor forward
         action = self.actor(state,request)
         
         # critic forward but not predict stream
-        output,_ = self.critic(state,action)
+        output,_ = self.critic(state.cuda(),action.cuda())
         
         # lasso predict stream
         batch_size = action.shape[0]
@@ -125,4 +127,5 @@ class PA_ROBOT:
         advice['max'] = action.max(axis=0)
         advice['min'] = action.min(axis=0)
         
-        return advice,output,stream
+        # feed/stream
+        return advice,output,stream,advice.loc['MLPAP_FQ-0619.PV','mean']/stream[0][0]

@@ -14,11 +14,13 @@ model_name = st.selectbox('what model you want to use?',('V1',))
 st.write('You selected',model_name)
 
 request = st.number_input('input set point(0997)')
-state = st.number_input('input DATA OF USE')
+state1 = st.number_input('input DATA OF USE')
+state2 = st.number_input('input env tempe')
+state = [state1,state2]
 st.write('The user request {} state {}'.format(request,state))
 
 if st.button('predict'):
-	advice,output,stream = model_dict[model_name].get_advice(state,request)
+	advice,output,stream,_ = model_dict[model_name].get_advice(state,request)
 	st.subheader('control advice')
 	st.write(advice)
 	
