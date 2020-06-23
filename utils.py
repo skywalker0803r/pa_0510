@@ -22,10 +22,11 @@ class Critic(nn.Module):
         
         self.time_step = time_step
         self.num_sensor = num_sensor
-        self.h_size = 64
+        self.h_size = 128
         
         self.output_layer = nn.Sequential(nn.Linear(self.h_size,self.h_size),
                                           nn.ReLU(),
+                                          nn.Dropout(0.2),
                                           nn.Linear(self.h_size,1),
                                          )
         
@@ -38,7 +39,7 @@ class Critic(nn.Module):
                                         nn.ReLU(),
                                        )
         
-        self.fc_layer = nn.Sequential(nn.Linear(461,self.h_size),
+        self.fc_layer = nn.Sequential(nn.Linear(self.h_size+1,self.h_size),
                                           nn.ReLU(),
                                           nn.Linear(self.h_size,self.h_size),
                                          )
@@ -46,12 +47,8 @@ class Critic(nn.Module):
     def forward(self,state,action):
         batch_size = state.shape[0]
         
-        # action have two path,path_1 and path_2
-        action_1 = self.conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
-        action_2 = action.reshape(batch_size,-1)
-        
-        # combine two path action_1,action_2
-        action = torch.cat((action_1,action_2),dim=-1)
+        # action
+        action = self.conv_layer(action.permute(0,2,1)).reshape(batch_size,-1)
         
         # combine state action
         combine = torch.cat((state,action),dim=-1)
