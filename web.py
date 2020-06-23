@@ -20,7 +20,7 @@ state = [state1,state2]
 st.write('The user request {} state {}'.format(request,state))
 
 if st.button('predict'):
-	advice,output,stream,_ = model_dict[model_name].get_advice(state,request)
+	advice,output,stream,_,_ = model_dict[model_name].get_advice(state,request)
 	st.subheader('control advice')
 	st.write(advice)
 	
@@ -31,7 +31,7 @@ if st.button('predict'):
 	st.write(pd.DataFrame(stream))
 	
 	feed  = advice.iloc[0,1]
-	st.subheader('predict 單耗')
+	st.subheader('predict 單耗(出料)')
 	st.write(pd.DataFrame(feed/output))
 
 	st.subheader('predict 單耗(蒸氣)')

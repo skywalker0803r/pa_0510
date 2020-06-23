@@ -16,7 +16,6 @@ import torchvision
 import joblib
 import os
 
-
 class Critic(nn.Module):
     def __init__(self):
         super().__init__()
@@ -110,7 +109,8 @@ class PA_ROBOT:
         
         # lasso predict stream
         batch_size = action.shape[0]
-        stream = (action.reshape(batch_size,-1)@self.lasso_w).reshape(-1,1)
+        A = torch.cat((action.reshape(batch_size,-1),state),dim=-1)
+        stream = (A@self.lasso_w).reshape(-1,1)
         
         # inverse transform
         output = output.detach().cpu().numpy()
@@ -127,5 +127,6 @@ class PA_ROBOT:
         advice['max'] = action.max(axis=0)
         advice['min'] = action.min(axis=0)
         
-        # feed/stream
-        return advice,output,stream,advice.loc['MLPAP_FQ-0619.PV','mean']/stream[0][0]
+        # feed
+        feed = advice.loc['MLPAP_FQ-0619.PV','mean']
+        return advice,output,stream,feed/output[0][0],feed/stream[0][0]
