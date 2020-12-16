@@ -124,6 +124,7 @@ class PA_ROBOT:
         # sacle input
         request = self.mm_output.transform([[request]])
         state = self.mm_state.transform([state])
+        print(state)
         
         # tensor format input
         request = torch.FloatTensor([request]).reshape(-1,1)
