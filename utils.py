@@ -87,6 +87,37 @@ class PA_ROBOT:
         self.actor = actor
         self.critic = critic
         self.lasso_w = lasso_w
+
+    def get_predict(self,s,a):
+        
+        feed = a.iloc[0,0]
+        action = pd.DataFrame(index=[*range(36)],columns=self.action_col)
+        for i in range(36):
+            action.iloc[i,:] = a.values
+        action = action.values
+        
+        state = self.mm_state.transform([s])
+        action = self.mm_action.transform(action)
+        action = np.expand_dims(action,axis=0)
+
+        state = torch.FloatTensor(state)
+        action = torch.FloatTensor(action)
+
+        # critic forward but not predict stream
+        output,_ = self.critic(state.cuda(),action.cuda())
+
+        # lasso predict stream
+        batch_size = action.shape[0]
+        A = torch.cat((action.reshape(batch_size,-1),state),dim=-1)
+        stream = (A@self.lasso_w).reshape(-1,1)
+
+        # inverse transform
+        output = output.detach().cpu().numpy()
+        output = self.mm_output.inverse_transform(output)[0][0]
+        stream = stream.detach().cpu().numpy()
+        stream = self.mm_stream.inverse_transform(stream)[0][0]
+
+        return output,stream,feed/output,feed/stream
     
     def get_advice(self,state,request):
         
