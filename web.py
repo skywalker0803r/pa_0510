@@ -5,7 +5,7 @@ import joblib
 import warnings;warnings.simplefilter('ignore')
 from utils import *
 
-tag = pd.read_csv(r'C:\Users\skywalker0803r\Desktop\pa_0510\data\tag_cleaned.csv')[['TAG','chinese']]
+tag = pd.read_csv(r'./data/tag_cleaned.csv')[['TAG','chinese']]
 tag = dict(zip(tag.TAG,tag.chinese))
 model_dict = {}
 model_dict['V1'] = joblib.load('./model/PAagent.pkl')
