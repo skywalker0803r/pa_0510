@@ -5,16 +5,19 @@ import joblib
 import warnings;warnings.simplefilter('ignore')
 from utils import *
 
-tag = pd.read_csv(r'./data/tag_cleaned.csv')[['TAG','chinese']]
-tag = dict(zip(tag.TAG,tag.chinese))
+tag = pd.read_csv(r'./data/tag_cleaned.csv')[['TAG','chinese','min','max']]
+tag.index = tag.TAG.values
+tag.loc['MLPAP_TJC-0757A.PV','chinese'] = str(tag.loc['MLPAP_TJC-0757A.PV','chinese'])+'MLPAP_TJC-0757A.PV'
+tag.loc['MLPAP_TJ-0757B.PV','chinese'] = str(tag.loc['MLPAP_TJ-0757B.PV','chinese'])+'MLPAP_TJ-0757B.PV'
+
 model_dict = {}
 model_dict['V1'] = joblib.load('./model/PAagent.pkl')
 st.title('PA control advice model')
 model_name = st.selectbox('what model you want to use?',('V1',))
 st.write('You selected',model_name)
 request = st.number_input('input set point(0997)')
-state1 = st.number_input('input 觸媒使用時間最大1最小0')
-state2 = st.number_input('input 環境溫度例如30')
+state1 = st.number_input('input 觸媒使用時間range[{}~{}]'.format(0,1))
+state2 = st.number_input('input 環境溫度range[{}~{}]'.format(tag.loc['MLPAP_TJ3-1110.PV','min'],tag.loc['MLPAP_TJ3-1110.PV','max']))
 
 #============給建議=========================================
 if st.button('給操作建議'):
@@ -34,14 +37,14 @@ if st.button('給操作建議'):
     st.write(pd.DataFrame(feed/stream))
 #===============預測出料======================================
 st.title('預測出料')
-s1 = st.number_input('input 觸媒使用時間最大1最小0.')
-s2 = st.number_input('input 環境溫度例如30.')
+s1 = st.number_input('input 觸媒使用時間range[{}~{}].'.format(0,1))
+s2 = st.number_input('input 環境溫度range[{}~{}].'.format(tag.loc['MLPAP_TJ3-1110.PV','min'],tag.loc['MLPAP_TJ3-1110.PV','max']))
 s = [s1,s2]
 model = model_dict[model_name]
 action_df = pd.DataFrame(index=[0],columns=model.action_col)
 for a in model.action_col:
     try:
-        var = st.number_input('{}'.format(tag[a]))
+        var = st.number_input('{} range[{}~{}]'.format(tag.loc[a,'chinese'],tag.loc[a,'min'],tag.loc[a,'max']))
     except:
         var = st.number_input('{}'.format(a))
     action_df[a] = var
