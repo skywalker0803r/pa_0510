@@ -5,23 +5,58 @@ import joblib
 import warnings;warnings.simplefilter('ignore')
 from utils import *
 
+tag = pd.read_csv(r'./data/tag_cleaned.csv')[['TAG','chinese','min','max']]
+tag.index = tag.TAG.values
+tag.loc['MLPAP_TJC-0757A.PV','chinese'] = str(tag.loc['MLPAP_TJC-0757A.PV','chinese'])+'MLPAP_TJC-0757A.PV'
+tag.loc['MLPAP_TJ-0757B.PV','chinese'] = str(tag.loc['MLPAP_TJ-0757B.PV','chinese'])+'MLPAP_TJ-0757B.PV'
+
 model_dict = {}
 model_dict['V1'] = joblib.load('./model/PAagent.pkl')
-
 st.title('PA control advice model')
-
 model_name = st.selectbox('what model you want to use?',('V1',))
 st.write('You selected',model_name)
-
 request = st.number_input('input set point(0997)')
-state = st.number_input('input DATA OF USE')
-st.write('The user request {} state {}'.format(request,state))
+state1 = st.number_input('input 觸媒使用時間range[{}~{}]'.format(0,1))
+state2 = st.number_input('input 環境溫度range[{}~{}]'.format(tag.loc['MLPAP_TJ3-1110.PV','min'],tag.loc['MLPAP_TJ3-1110.PV','max']))
 
-if st.button('predict'):
-	advice,output,stream = model_dict[model_name].get_advice(state,request)
-	st.subheader('control advice')
-	st.write(advice)
-	st.subheader('predict output')
-	st.write(pd.DataFrame(output))
-	st.subheader('predict stream')
-	st.write(pd.DataFrame(stream))
+#============給建議=========================================
+if st.button('給操作建議'):
+    state = [state1,state2]
+    st.write('The user request {} state {}'.format(request,state))
+    advice,output,stream,_,_ = model_dict[model_name].get_advice(state,request)
+    st.subheader('control advice')
+    st.write(advice)
+    st.subheader('predict output')
+    st.write(pd.DataFrame(output))
+    st.subheader('predict stream')
+    st.write(pd.DataFrame(stream))
+    feed  = advice.iloc[0,1]
+    st.subheader('predict 單耗(出料)')
+    st.write(pd.DataFrame(feed/output))
+    st.subheader('predict 單耗(蒸氣)')
+    st.write(pd.DataFrame(feed/stream))
+#===============預測出料======================================
+st.title('預測出料')
+s1 = st.number_input('input 觸媒使用時間range[{}~{}].'.format(0,1))
+s2 = st.number_input('input 環境溫度range[{}~{}].'.format(tag.loc['MLPAP_TJ3-1110.PV','min'],tag.loc['MLPAP_TJ3-1110.PV','max']))
+s = [s1,s2]
+model = model_dict[model_name]
+action_df = pd.DataFrame(index=[0],columns=model.action_col)
+for a in model.action_col:
+    try:
+        var = st.number_input('{} range[{}~{}]'.format(tag.loc[a,'chinese'],tag.loc[a,'min'],tag.loc[a,'max']))
+    except:
+        var = st.number_input('{}'.format(a))
+    action_df[a] = var
+if st.button('執行預測出料'):
+    result = model.get_predict(s,action_df)
+    output,stream,單耗,蒸氣單耗 = result
+    st.subheader('predict output')
+    st.write(output)
+    st.subheader('predict stream')
+    st.write(stream)
+    st.subheader('predict 單耗(出料)')
+    st.write(單耗)
+    st.subheader('predict 單耗(蒸氣)')
+    st.write(蒸氣單耗)
+    
